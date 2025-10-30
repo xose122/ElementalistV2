@@ -2268,13 +2268,23 @@
             const availableSpells = elementalistSpellList[slotConfig.spellLevel] || [];
             const aetherSpellIds = getAetherSpellIds();
 
+            // Get elementalist IDs excluding current slot
+            const otherElementalistSlotIds = [];
+            for (let key in character.elementalistSlots) {
+                if (key !== slotConfig.key && character.elementalistSlots[key]) {
+                    otherElementalistSlotIds.push(character.elementalistSlots[key].id);
+                }
+            }
+
             availableSpells.forEach(spell => {
                 const spellDiv = document.createElement('div');
                 spellDiv.className = 'spell-item';
                 spellDiv.style.marginBottom = '10px';
 
-                // Check if already prepared as druid spell or in aether slots
-                const alreadyPrepared = character.preparedSpells.includes(spell.id) || aetherSpellIds.includes(spell.id);
+                // Check if already used in druid list, aether slots, or OTHER elementalist slots (not current slot)
+                const alreadyPrepared = character.preparedSpells.includes(spell.id) ||
+                                       aetherSpellIds.includes(spell.id) ||
+                                       otherElementalistSlotIds.includes(spell.id);
                 if (alreadyPrepared) {
                     spellDiv.style.opacity = '0.5';
                     spellDiv.style.pointerEvents = 'none';
@@ -2339,13 +2349,23 @@
             const availableSpells = aetherSpellList[slotConfig.spellLevel] || [];
             const elementalistSpellIds = getElementalistSpellIds();
 
+            // Get aether IDs excluding current slot
+            const otherAetherSlotIds = [];
+            for (let key in character.aetherSlots) {
+                if (key !== slotConfig.key && character.aetherSlots[key]) {
+                    otherAetherSlotIds.push(character.aetherSlots[key].id);
+                }
+            }
+
             availableSpells.forEach(spell => {
                 const spellDiv = document.createElement('div');
                 spellDiv.className = 'spell-item';
                 spellDiv.style.marginBottom = '10px';
 
-                // Check if already prepared as druid spell or in elementalist slots
-                const alreadyPrepared = character.preparedSpells.includes(spell.id) || elementalistSpellIds.includes(spell.id);
+                // Check if already used in druid list, elementalist slots, or OTHER aether slots (not current slot)
+                const alreadyPrepared = character.preparedSpells.includes(spell.id) ||
+                                       elementalistSpellIds.includes(spell.id) ||
+                                       otherAetherSlotIds.includes(spell.id);
                 if (alreadyPrepared) {
                     spellDiv.style.opacity = '0.5';
                     spellDiv.style.pointerEvents = 'none';
@@ -2613,12 +2633,24 @@
                     }
                 }
 
+                // Get other elementalist slots and aether slots
+                const aetherSpellIds = getAetherSpellIds();
+                const otherElementalistSlotIds = [];
+                for (let key in character.elementalistSlots) {
+                    if (key !== slotKey && character.elementalistSlots[key]) {
+                        otherElementalistSlotIds.push(character.elementalistSlots[key].id);
+                    }
+                }
+
                 // Elementalist spells can only swap with same level
                 availableSpells = elementalistSpellList[currentSpell.level] || [];
                 availableSpells = availableSpells.filter(s => s.id !== currentSpell.id);
 
                 availableSpells.forEach(spell => {
-                    const spellDiv = createSwapSpellElement(spell, currentSpell, listType, slotKey);
+                    const alreadyPrepared = character.preparedSpells.includes(spell.id) ||
+                                           aetherSpellIds.includes(spell.id) ||
+                                           otherElementalistSlotIds.includes(spell.id);
+                    const spellDiv = createSwapSpellElement(spell, currentSpell, listType, slotKey, alreadyPrepared);
                     swapList.appendChild(spellDiv);
                 });
             } else if (listType === 'aether') {
@@ -2631,22 +2663,31 @@
                     }
                 }
 
+                // Get other aether slots and elementalist slots
+                const elementalistSpellIds = getElementalistSpellIds();
+                const otherAetherSlotIds = [];
+                for (let key in character.aetherSlots) {
+                    if (key !== slotKey && character.aetherSlots[key]) {
+                        otherAetherSlotIds.push(character.aetherSlots[key].id);
+                    }
+                }
+
                 // Aether spells can only swap with same level
                 availableSpells = aetherSpellList[currentSpell.level] || [];
                 availableSpells = availableSpells.filter(s => s.id !== currentSpell.id);
 
                 availableSpells.forEach(spell => {
-                    const spellDiv = createSwapSpellElement(spell, currentSpell, listType, slotKey);
+                    const alreadyPrepared = character.preparedSpells.includes(spell.id) ||
+                                           elementalistSpellIds.includes(spell.id) ||
+                                           otherAetherSlotIds.includes(spell.id);
+                    const spellDiv = createSwapSpellElement(spell, currentSpell, listType, slotKey, alreadyPrepared);
                     swapList.appendChild(spellDiv);
                 });
             } else {
-                // Druid spells can swap with ANY level druid spell that isn't already prepared and not in elementalist/aether slots
+                // Druid spells can swap with ANY level druid spell (show locked ones as disabled)
                 availableSpells = druidSpells.filter(s => {
                     const spellLevel = spellLevelToNumber(s.level);
-                    return s.id !== currentSpell.id &&
-                           !character.preparedSpells.includes(s.id) &&
-                           !lockedSpellIds.includes(s.id) &&
-                           spellLevel <= maxSpellLevel;
+                    return s.id !== currentSpell.id && spellLevel <= maxSpellLevel;
                 });
 
                 const grouped = {};
@@ -2668,7 +2709,8 @@
                         swapList.appendChild(header);
 
                         grouped[level].forEach(spell => {
-                            const spellDiv = createSwapSpellElement(spell, currentSpell, listType, null);
+                            const alreadyPrepared = character.preparedSpells.includes(spell.id) || lockedSpellIds.includes(spell.id);
+                            const spellDiv = createSwapSpellElement(spell, currentSpell, listType, null, alreadyPrepared);
                             swapList.appendChild(spellDiv);
                         });
                     }
@@ -2682,20 +2724,27 @@
             modal.classList.add('active');
         }
 
-        function createSwapSpellElement(spell, currentSpell, listType, slotKey) {
+        function createSwapSpellElement(spell, currentSpell, listType, slotKey, alreadyPrepared = false) {
             const spellDiv = document.createElement('div');
             spellDiv.className = 'spell-item';
             spellDiv.style.marginBottom = '10px';
+
+            if (alreadyPrepared) {
+                spellDiv.style.opacity = '0.5';
+                spellDiv.style.pointerEvents = 'none';
+            }
 
             const name = document.createElement('span');
             name.className = 'spell-name spell-item-clickable';
             name.textContent = spell.name;
             name.style.flex = '1';
             name.style.cursor = 'pointer';
-            name.onclick = (e) => {
-                e.stopPropagation();
-                showSpellDescription(spell.id);
-            };
+            if (!alreadyPrepared) {
+                name.onclick = (e) => {
+                    e.stopPropagation();
+                    showSpellDescription(spell.id);
+                };
+            }
 
             const level = document.createElement('span');
             level.className = 'spell-level';
@@ -2703,12 +2752,20 @@
 
             const swapBtn = document.createElement('button');
             swapBtn.className = 'btn-swap';
-            swapBtn.textContent = '⇄';
             swapBtn.style.fontSize = '1.2em';
-            swapBtn.onclick = (e) => {
-                e.stopPropagation();
-                performSwap(currentSpell, spell, listType, slotKey);
-            };
+
+            if (alreadyPrepared) {
+                swapBtn.style.background = '#95a5a6';
+                swapBtn.textContent = '✓';
+                swapBtn.disabled = true;
+                swapBtn.title = 'Ya preparado en otra lista';
+            } else {
+                swapBtn.textContent = '⇄';
+                swapBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    performSwap(currentSpell, spell, listType, slotKey);
+                };
+            }
 
             spellDiv.appendChild(name);
             spellDiv.appendChild(level);
